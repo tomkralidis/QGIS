@@ -39,7 +39,8 @@ from qgis.PyQt.QtGui import QColor
 
 from qgis.core import (QgsApplication, QgsCoordinateReferenceSystem,
                        QgsCoordinateTransform, QgsGeometry, QgsPointXY,
-                       QgsProviderRegistry, QgsSettings, QgsProject)
+                       QgsProviderRegistry, QgsSettings, QgsProject,
+                       QgsRectangle)
 from qgis.gui import QgsRubberBand, QgsGui
 from qgis.utils import OverrideCursor
 
@@ -472,7 +473,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                                            self.startfrom)
 
         except Exception as err:
-            QMessageBox.warning(self, self.tr('Search error'),
+            QMessageBox.warning(self, self.tr('Search error'), 
                                 self.tr('Search error: {0}').format(err))
             return
 
@@ -551,11 +552,13 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
 
         # if the record has a bbox, show a footprint on the map
         if record['bbox'] is not None:
-            points = bbox_to_polygon(record['bbox'])
-            if points is not None:
+            bx = record['bbox']
+            rt = QgsRectangle(float(bx['minx']), float(bx['miny']),
+                              float(bx['maxx']), float(bx['maxy']))
+            geom = QgsGeometry.fromRect(rt)
+            if geom is not None:
                 src = QgsCoordinateReferenceSystem("EPSG:4326")
                 dst = self.map.mapSettings().destinationCrs()
-                geom = QgsGeometry.fromWkt(points)
                 if src.postgisSrid() != dst.postgisSrid():
                     ctr = QgsCoordinateTransform(
                         src, dst, QgsProject.instance())
@@ -848,11 +851,9 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                 self.tr('Error getting response: {0}').format(err))
             return
 
-        record.xml_url = cat.request
-
         crd = RecordDialog()
         metadata = render_template('en', self.context,
-                                   record, 'record_metadata_dc.html')
+                                   record, self.catalog.record_info_template)
 
         style = QgsApplication.reportStyleSheet()
         crd.textMetadata.document().setDefaultStyleSheet(style)
@@ -990,20 +991,3 @@ def _get_field_value(field):
 
     return value
 
-
-def bbox_to_polygon(bbox):
-    """converts OWSLib bbox object to list of QgsPointXY objects"""
-
-    print(bbox)
-    if all([bbox['minx'] is not None,
-            bbox['maxx'] is not None,
-            bbox['miny'] is not None,
-            bbox['maxy'] is not None]):
-        minx = float(bbox['minx'])
-        miny = float(bbox['miny'])
-        maxx = float(bbox['maxx'])
-        maxy = float(bbox['maxy'])
-
-        return 'POLYGON((%.2f %.2f, %.2f %.2f, %.2f %.2f, %.2f %.2f, %.2f %.2f))' % (minx, miny, minx, maxy, maxx, maxy, maxx, miny, minx, miny)  # noqa
-    else:
-        return None
