@@ -48,6 +48,7 @@ class SearchBase:
         self.password = password
         self.auth = auth
         self.service_info_template = None
+        self.record_info_template = None
         self.request = None
         self.response = None
         self.matches = 0
@@ -59,7 +60,7 @@ class SearchBase:
     def query_records(self):
         pass
 
-    def get_record(self):
+    def get_record(self, identifier):
         pass
 
     def records(self):
@@ -72,6 +73,7 @@ class CSW202Search(SearchBase):
 
         self.type = CATALOG_TYPES[0]
         self.service_info_template = 'csw_service_metadata.html'
+        self.record_info_template ='record_metadata_dc.html'
         self.constraints = []
 
         self.conn = CatalogueServiceWeb(self.url, timeout=self.timeout,
@@ -148,6 +150,7 @@ class OARecSearch(SearchBase):
 
         self.type = CATALOG_TYPES[1]
         self.service_info_template = 'oarec_service_metadata.html'
+        self.record_info_template = 'record_metadata_oarec.html'
         self.base_url = None
         self.record_collection = None
 
@@ -156,9 +159,12 @@ class OARecSearch(SearchBase):
             self.conn = Records(
                 self.base_url, timeout=self.timeout, auth=self.auth)
             c = self.conn.collection(self.record_collection)
-            self.conn.title = c['title']
-            self.conn.description = c['description']
-            self.conn.links = c['links']
+            try:
+                self.conn.links = c['links']
+                self.conn.title = c['title']
+                self.conn.description = c['description']
+            except KeyError:
+                pass
         else:
             self.conn = Records(self.url, timeout=self.timeout, auth=self.auth)
 
@@ -167,11 +173,42 @@ class OARecSearch(SearchBase):
         if 'collections' in self.url:
             self.record_collection = self.url.rstrip('/').split('/')[-1]
 
-        self.response = self.conn.collection_items(
-            self.record_collection, limit=limit, startindex=offset)
+        if keywords is None:
+            if bbox is []:
+                self.response = self.conn.collection_items(
+                    self.record_collection, limit=limit, startindex=offset)
+            else:
+                self.response = self.conn.collection_items(
+                    self.record_collection, bbox=bbox, limit=limit, 
+                    startindex=offset)
+        else:
+            if bbox is []:
+                self.response = self.conn.collection_items(
+                    self.record_collection, q=keywords, limit=limit, 
+                    startindex=offset)
+            else:
+                self.response = self.conn.collection_items(
+                    self.record_collection, q=keywords, bbox=bbox, 
+                    limit=limit, startindex=offset)
 
         self.matches = self.response['numberMatched']
         self.returned = self.response['numberReturned']
+
+    def get_record(self, identifier):
+
+        if 'collections' in self.url:
+            self.record_collection = self.url.rstrip('/').split('/')[-1]
+        # todo : implement a get-single-by-id or id filter on owslib
+        self.response = self.conn.collection_items(
+                    self.record_collection, q=identifier)
+
+        record = None
+        for rec in self.response['features']: # to prevent false positives, pending get-by-id method
+            if rec['id'] == identifier:
+                record = rec
+                break
+
+        return record
 
     def records(self):
         recs = []
