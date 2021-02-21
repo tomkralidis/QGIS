@@ -28,7 +28,6 @@ from gettext import gettext, ngettext
 import logging
 import warnings
 import os
-import codecs
 import webbrowser
 from xml.dom.minidom import parseString
 import xml.etree.ElementTree as etree
@@ -139,8 +138,7 @@ def get_help_url():
     else:
         version = '.'.join([major, minor])
 
-    path = '%s/%s/docs/user_manual/plugins/core_plugins/plugins_metasearch.html' % \
-           (version, locale_name)
+    path = '%s/%s/docs/user_manual/plugins/core_plugins/plugins_metasearch.html' % (version, locale_name)  # noqa
 
     return '/'.join(['https://docs.qgis.org', path])
 

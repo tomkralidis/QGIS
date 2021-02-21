@@ -29,14 +29,13 @@
 
 import json
 import os.path
-import warnings
 from urllib.request import build_opener, install_opener, ProxyHandler
 
 from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtWidgets import (QApplication, QDialog, QComboBox,
+from qgis.PyQt.QtWidgets import (QDialog, QComboBox,
                                  QDialogButtonBox, QMessageBox,
                                  QTreeWidgetItem, QWidget)
-from qgis.PyQt.QtGui import QColor, QCursor
+from qgis.PyQt.QtGui import QColor
 
 from qgis.core import (QgsApplication, QgsCoordinateReferenceSystem,
                        QgsCoordinateTransform, QgsGeometry, QgsPointXY,
@@ -44,24 +43,12 @@ from qgis.core import (QgsApplication, QgsCoordinateReferenceSystem,
 from qgis.gui import QgsRubberBand, QgsGui
 from qgis.utils import OverrideCursor
 
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=ResourceWarning)
-    warnings.filterwarnings("ignore", category=ImportWarning)
-    from owslib.csw import CatalogueServiceWeb  # spellok
-
-from owslib.fes import BBox, PropertyIsLike
-from owslib.ows import ExceptionReport
-
-try:
-    from owslib.util import Authentication
-except ImportError:
-    pass
-
 from MetaSearch import link_types
 from MetaSearch.dialogs.manageconnectionsdialog import ManageConnectionsDialog
 from MetaSearch.dialogs.newconnectiondialog import NewConnectionDialog
 from MetaSearch.dialogs.recorddialog import RecordDialog
 from MetaSearch.dialogs.xmldialog import XMLDialog
+from MetaSearch.search_backend import get_catalog_service
 from MetaSearch.util import (clean_ows_url, get_connections_from_file,
                              get_ui_class, get_help_url, highlight_xml,
                              normalize_text, open_url, render_template,
@@ -86,6 +73,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         self.catalog_url = None
         self.catalog_username = None
         self.catalog_password = None
+        self.catalog_type = None
         self.context = StaticContext()
 
         self.leKeywords.setShowSearchIcon(True)
@@ -161,6 +149,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         self.catalog_url = self.settings.value('%s/url' % key)
         self.catalog_username = self.settings.value('%s/username' % key)
         self.catalog_password = self.settings.value('%s/password' % key)
+        self.catalog_type = self.settings.value('%s/catalog-type' % key)
 
         self.set_bbox_global()
 
@@ -256,6 +245,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             self.catalog_url = self.settings.value('%s/url' % key)
             self.catalog_username = self.settings.value('%s/username' % key)
             self.catalog_password = self.settings.value('%s/password' % key)
+            self.catalog_type = self.settings.value('%s/catalog-type' % key)
 
         if caller == 'cmbConnectionsServices':  # clear server metadata
             self.textMetadata.clear()
@@ -270,16 +260,17 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         self.catalog_url = self.settings.value('%s/url' % key)
         self.catalog_username = self.settings.value('%s/username' % key)
         self.catalog_password = self.settings.value('%s/password' % key)
+        self.catalog_type = self.settings.value('%s/catalog-type' % key)
 
         # connect to the server
-        if not self._get_csw():
+        if not self._get_catalog():
             return
 
         if self.catalog:  # display service metadata
             self.btnCapabilities.setEnabled(True)
             metadata = render_template('en', self.context,
-                                       self.catalog,
-                                       'service_metadata.html')
+                                       self.catalog.conn,
+                                       self.catalog.service_info_template)
             style = QgsApplication.reportStyleSheet()
             self.textMetadata.clear()
             self.textMetadata.document().setDefaultStyleSheet(style)
@@ -308,8 +299,12 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         conn_edit.setWindowTitle(self.tr('Edit Catalog Service'))
         conn_edit.leName.setText(current_text)
         conn_edit.leURL.setText(url)
-        conn_edit.leUsername.setText(self.settings.value('/MetaSearch/%s/username' % current_text))
-        conn_edit.lePassword.setText(self.settings.value('/MetaSearch/%s/password' % current_text))
+        conn_edit.leUsername.setText(
+            self.settings.value('/MetaSearch/%s/username' % current_text))
+        conn_edit.lePassword.setText(
+            self.settings.value('/MetaSearch/%s/password' % current_text))
+        conn_edit.leCatalogType.setText(
+            self.settings.value('/MetaSearch/%s/catalog-type' % current_text))
 
         if conn_edit.exec_() == QDialog.Accepted:  # update service list
             self.populate_connection_list()
@@ -323,8 +318,9 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
 
         msg = self.tr('Remove service {0}?').format(current_text)
 
-        result = QMessageBox.question(self, self.tr('Delete Service'), msg,
-                                      QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        result = QMessageBox.question(
+            self, self.tr('Delete Service'), msg,
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if result == QMessageBox.Yes:  # remove service from list
             self.settings.remove(key)
             index_to_delete = self.cmbConnectionsServices.currentIndex()
@@ -445,6 +441,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         self.catalog_url = self.settings.value('%s/url' % key)
         self.catalog_username = self.settings.value('%s/username' % key)
         self.catalog_password = self.settings.value('%s/password' % key)
+        self.catalog_type = self.settings.value('%s/catalog-type' % key)
 
         # start position and number of records to return
         self.startfrom = 1
@@ -461,43 +458,25 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         maxx = self.leEast.text()
         maxy = self.leNorth.text()
         bbox = [minx, miny, maxx, maxy]
-
-        # only apply spatial filter if bbox is not global
-        # even for a global bbox, if a spatial filter is applied, then
-        # the CSW server will skip records without a bbox
-        if bbox != ['-180', '-90', '180', '90']:
-            self.constraints.append(BBox([miny, minx, maxy, maxx],
-                                         crs='urn:ogc:def:crs:EPSG::4326'))
-
-        # keywords
-        if self.leKeywords.text():
-            # TODO: handle multiple word searches
-            keywords = self.leKeywords.text()
-            self.constraints.append(PropertyIsLike('csw:AnyText', keywords))
-
-        if len(self.constraints) > 1:  # exclusive search (a && b)
-            self.constraints = [self.constraints]
+        keywords = self.leKeywords.text()
 
         # build request
-        if not self._get_csw():
+        if not self._get_catalog():
             return
 
         # TODO: allow users to select resources types
         # to find ('service', 'dataset', etc.)
         try:
             with OverrideCursor(Qt.WaitCursor):
-                self.catalog.getrecords2(constraints=self.constraints,
-                                         maxrecords=self.maxrecords, esn='full')
-        except ExceptionReport as err:
+                self.catalog.query_records(bbox, keywords, self.maxrecords,
+                                           self.startfrom)
+
+        except Exception as err:
             QMessageBox.warning(self, self.tr('Search error'),
                                 self.tr('Search error: {0}').format(err))
             return
-        except Exception as err:
-            QMessageBox.warning(self, self.tr('Connection error'),
-                                self.tr('Connection error: {0}').format(err))
-            return
 
-        if self.catalog.results['matches'] == 0:
+        if self.catalog.matches == 0:
             self.lblResults.setText(self.tr('0 results'))
             return
 
@@ -508,30 +487,27 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
 
         self.treeRecords.clear()
 
-        position = self.catalog.results['returned'] + self.startfrom - 1
+        position = self.catalog.returned + self.startfrom - 1
 
         msg = self.tr('Showing {0} - {1} of %n result(s)', 'number of results',
-                      self.catalog.results['matches']).format(self.startfrom,
-                                                              position)
+                      self.catalog.matches).format(self.startfrom, position)
 
         self.lblResults.setText(msg)
 
-        for rec in self.catalog.records:
+        for rec in self.catalog.records():
             item = QTreeWidgetItem(self.treeRecords)
-            if self.catalog.records[rec].type:
-                item.setText(0, normalize_text(self.catalog.records[rec].type))
+            if rec['type']:
+                item.setText(0, normalize_text(rec['type']))
             else:
                 item.setText(0, 'unknown')
-            if self.catalog.records[rec].title:
-                item.setText(1,
-                             normalize_text(self.catalog.records[rec].title))
-            if self.catalog.records[rec].identifier:
-                set_item_data(item, 'identifier',
-                              self.catalog.records[rec].identifier)
+            if rec['title']:
+                item.setText(1, normalize_text(rec['title']))
+            if rec['identifier']:
+                set_item_data(item, 'identifier', rec['identifier'])
 
         self.btnShowXml.setEnabled(True)
 
-        if self.catalog.results["matches"] < self.maxrecords:
+        if self.catalog.matches < self.maxrecords:
             disabled = False
         else:
             disabled = True
@@ -565,22 +541,24 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
 
         identifier = get_item_data(item, 'identifier')
         try:
-            record = self.catalog.records[identifier]
-        except KeyError as err:
+            record = next(item for item in self.catalog.records()
+                          if item['identifier'] == identifier)
+        except KeyError:
             QMessageBox.warning(self,
                                 self.tr('Record parsing error'),
                                 'Unable to locate record identifier')
             return
 
         # if the record has a bbox, show a footprint on the map
-        if record.bbox is not None:
-            points = bbox_to_polygon(record.bbox)
+        if record['bbox'] is not None:
+            points = bbox_to_polygon(record['bbox'])
             if points is not None:
                 src = QgsCoordinateReferenceSystem("EPSG:4326")
                 dst = self.map.mapSettings().destinationCrs()
                 geom = QgsGeometry.fromWkt(points)
                 if src.postgisSrid() != dst.postgisSrid():
-                    ctr = QgsCoordinateTransform(src, dst, QgsProject.instance())
+                    ctr = QgsCoordinateTransform(
+                        src, dst, QgsProject.instance())
                     try:
                         geom.transform(ctr)
                     except Exception as err:
@@ -596,10 +574,8 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
     def find_services(self, record, item):
         """scan record for WMS/WMTS|WFS|WCS endpoints"""
 
-        links = record.uris + record.references
-
         services = {}
-        for link in links:
+        for link in record['links']:
 
             if 'scheme' in link:
                 link_type = link['scheme']
@@ -611,18 +587,22 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             if link_type is not None:
                 link_type = link_type.upper()
 
-            wmswmst_link_types = list(map(str.upper, link_types.WMSWMST_LINK_TYPES))
+            wmswmst_link_types = list(
+                map(str.upper, link_types.WMSWMST_LINK_TYPES))
             wfs_link_types = list(map(str.upper, link_types.WFS_LINK_TYPES))
             wcs_link_types = list(map(str.upper, link_types.WCS_LINK_TYPES))
             ams_link_types = list(map(str.upper, link_types.AMS_LINK_TYPES))
             afs_link_types = list(map(str.upper, link_types.AFS_LINK_TYPES))
-            gis_file_link_types = list(map(str.upper, link_types.GIS_FILE_LINK_TYPES))
+            gis_file_link_types = list(
+                map(str.upper, link_types.GIS_FILE_LINK_TYPES))
 
             # if the link type exists, and it is one of the acceptable
             # interactive link types, then set
-            if all([link_type is not None,
-                    link_type in wmswmst_link_types + wfs_link_types +
-                    wcs_link_types + ams_link_types + afs_link_types + gis_file_link_types]):
+            all_link_types = (wmswmst_link_types + wfs_link_types +
+                              wcs_link_types + ams_link_types +
+                              afs_link_types + gis_file_link_types)
+
+            if all([link_type is not None, link_type in all_link_types]):
                 if link_type in wmswmst_link_types:
                     services['wms'] = link['url']
                     self.mActionAddWms.setEnabled(True)
@@ -654,9 +634,9 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         if caller == 'btnFirst':
             self.startfrom = 1
         elif caller == 'btnLast':
-            self.startfrom = self.catalog.results['matches'] - self.maxrecords + 1
+            self.startfrom = self.catalog.matches - self.maxrecords + 1
         elif caller == 'btnNext':
-            if self.startfrom > self.catalog.results["matches"] - self.maxrecords:
+            if self.startfrom > self.catalog.matches - self.maxrecords:
                 msg = self.tr('End of results. Go to start?')
                 res = QMessageBox.information(self, self.tr('Navigation'),
                                               msg,
@@ -676,7 +656,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                                               (QMessageBox.Ok |
                                                QMessageBox.Cancel))
                 if res == QMessageBox.Ok:
-                    self.startfrom = (self.catalog.results['matches'] -
+                    self.startfrom = (self.catalog.matches -
                                       self.maxrecords + 1)
                 else:
                     return
@@ -686,17 +666,14 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                 self.startfrom -= self.maxrecords
 
         try:
+            print("MAXRECORDS", self.maxrecords)
+            print("STARTFROM", self.startfrom)
             with OverrideCursor(Qt.WaitCursor):
-                self.catalog.getrecords2(constraints=self.constraints,
-                                         maxrecords=self.maxrecords,
-                                         startposition=self.startfrom, esn='full')
-        except ExceptionReport as err:
+                self.catalog.query_records(limit=self.maxrecords,
+                                           offset=self.startfrom)
+        except Exception as err:
             QMessageBox.warning(self, self.tr('Search error'),
                                 self.tr('Search error: {0}').format(err))
-            return
-        except Exception as err:
-            QMessageBox.warning(self, self.tr('Connection error'),
-                                self.tr('Connection error: {0}').format(err))
             return
 
         self.display_results()
@@ -730,7 +707,8 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             data_url = item_data['ams'].split('MapServer')[0] + 'MapServer'
         elif caller == 'mActionAddAfs':
             stype = ['ESRI:ArcGIS:FeatureServer', 'afs', 'arcgisfeatureserver']
-            data_url = item_data['afs'].split('FeatureServer')[0] + 'FeatureServer'
+            data_url = (item_data['afs'].split('FeatureServer')[0] +
+                        'FeatureServer')
 
         sname = '%s from MetaSearch' % stype[1]
 
@@ -752,8 +730,9 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         # check for duplicates
         if sname in keys:  # duplicate found
             msg = self.tr('Connection {0} exists. Overwrite?').format(sname)
-            res = QMessageBox.warning(self, self.tr('Saving server'), msg,
-                                      QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+            res = QMessageBox.warning(
+                self, self.tr('Saving server'), msg,
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
             if res == QMessageBox.No:  # assign new name with serial
                 sname = serialize_string(sname)
             elif res == QMessageBox.Cancel:
@@ -768,11 +747,10 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         self.settings.endGroup()
 
         # open provider window
-        ows_provider = QgsGui.sourceSelectProviderRegistry().createSelectionWidget(
-            stype[2],
-            self,
-            Qt.Widget,
-            QgsProviderRegistry.WidgetMode.Embedded)
+        ows_provider = QgsGui.sourceSelectProviderRegistry().\
+            createSelectionWidget(
+                stype[2], self, Qt.Widget,
+                QgsProviderRegistry.WidgetMode.Embedded)
         service_type = stype[0]
 
         # connect dialog signals to iface slots
@@ -813,7 +791,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             # only for wfs
             if service_type == 'OGC:WFS':
                 ows_provider.cmbConnections_activated(index)
-            elif service_type in ['ESRI:ArcGIS:MapServer', 'ESRI:ArcGIS:FeatureServer']:
+            elif service_type in ['ESRI:ArcGIS:MapServer', 'ESRI:ArcGIS:FeatureServer']:  # noqa
                 ows_provider.cmbConnections_activated(index)
         getattr(ows_provider, connect)()
 
@@ -856,23 +834,20 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
 
         try:
             with OverrideCursor(Qt.WaitCursor):
-                cat = CatalogueServiceWeb(self.catalog_url, timeout=self.timeout,  # spellok
+                cat = get_catalog_service(self.catalog_url,  # spellok
+                                          catalog_type=self.catalog_type,
+                                          timeout=self.timeout,
                                           username=self.catalog_username,
                                           password=self.catalog_password,
                                           auth=auth)
-                cat.getrecordbyid(
-                    [self.catalog.records[identifier].identifier])
-        except ExceptionReport as err:
-            QMessageBox.warning(self, self.tr('GetRecords error'),
-                                self.tr('Error getting response: {0}').format(err))
-            return
-        except KeyError as err:
-            QMessageBox.warning(self,
-                                self.tr('Record parsing error'),
-                                self.tr('Unable to locate record identifier'))
+                record = cat.get_record(identifier)
+
+        except Exception as err:
+            QMessageBox.warning(
+                self, self.tr('GetRecords error'),
+                self.tr('Error getting response: {0}').format(err))
             return
 
-        record = cat.records[identifier]
         record.xml_url = cat.request
 
         crd = RecordDialog()
@@ -931,8 +906,8 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         QDialog.reject(self)
         self.rubber_band.reset()
 
-    def _get_csw(self):
-        """convenience function to init owslib.csw.CatalogueServiceWeb"""  # spellok
+    def _get_catalog(self):
+        """convenience function to init catalog wrapper"""
 
         self.disable_ssl_verification = self.disableSSLVerification.isChecked()
         auth = None
@@ -946,18 +921,13 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         # connect to the server
         with OverrideCursor(Qt.WaitCursor):
             try:
-                self.catalog = CatalogueServiceWeb(self.catalog_url,  # spellok
-                                                   timeout=self.timeout,
-                                                   username=self.catalog_username,
-                                                   password=self.catalog_password,
-                                                   auth=auth)
+                self.catalog = get_catalog_service(
+                    self.catalog_url, catalog_type=self.catalog_type,
+                    timeout=self.timeout, username=self.catalog_username,
+                    password=self.catalog_password, auth=auth)
                 return True
-            except ExceptionReport as err:
-                msg = self.tr('Error connecting to service: {0}').format(err)
-            except ValueError as err:
-                msg = self.tr('Value Error: {0}').format(err)
             except Exception as err:
-                msg = self.tr('Unknown Error: {0}').format(err)
+                msg = self.tr('Error connecting to service: {0}').format(err)
 
         QMessageBox.warning(self, self.tr('CSW Connection error'), msg)
         return False
@@ -1024,14 +994,15 @@ def _get_field_value(field):
 def bbox_to_polygon(bbox):
     """converts OWSLib bbox object to list of QgsPointXY objects"""
 
-    if all([bbox.minx is not None,
-            bbox.maxx is not None,
-            bbox.miny is not None,
-            bbox.maxy is not None]):
-        minx = float(bbox.minx)
-        miny = float(bbox.miny)
-        maxx = float(bbox.maxx)
-        maxy = float(bbox.maxy)
+    print(bbox)
+    if all([bbox['minx'] is not None,
+            bbox['maxx'] is not None,
+            bbox['miny'] is not None,
+            bbox['maxy'] is not None]):
+        minx = float(bbox['minx'])
+        miny = float(bbox['miny'])
+        maxx = float(bbox['maxx'])
+        maxy = float(bbox['maxy'])
 
         return 'POLYGON((%.2f %.2f, %.2f %.2f, %.2f %.2f, %.2f %.2f, %.2f %.2f))' % (minx, miny, minx, maxy, maxx, maxy, maxx, miny, minx, miny)  # noqa
     else:
