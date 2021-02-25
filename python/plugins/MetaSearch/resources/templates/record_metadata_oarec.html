@@ -1,4 +1,26 @@
 <!DOCTYPE html>
+{% macro render_item_value(v, width) -%}
+    {% set val = v | string | trim %}
+    {% if val|length and val.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp')) %}
+        {# Ends with image extension: render img element with link to image #}
+        <a href="{{ val }}"><img src="{{ val }}" alt="{{ val.split('/') | last }}" width="{{ width }}"/></a>
+    {% elif v is string or v is number %}
+        {{ val | urlize() }}
+    {% elif v is mapping %}
+        <ul>
+      {% for i,j in v.items() %}
+        <li><i>{{ gettext(i) }}:</i> {{ render_item_value(j, 60) }}</li>
+      {% endfor %}</ul>
+    {% elif v is iterable %}
+        <ul>
+      {% for i in v %}
+        <li>{{ render_item_value(i, 60) }}</li>
+      {% endfor %}
+        </ul>
+    {% else %}
+      {{ val | urlize() }}
+    {% endif %}
+{%- endmacro %}
 <html lang="{{ language }}">
     <head>
         <meta charset="utf-8"/>
@@ -22,18 +44,19 @@
         <section id="record-metadata">
             <table>
                 <tr>
-                    <td>Identifier</td>
+                    <td>gettext('Identifier')</td>
                     <td>{{ obj['id'] }}</td>
                 </tr>
+                {% if (obj['properties']) %}
                 {% for a,b in obj['properties'].items() %}
                     {% if a not in ['extent'] %}
                         <tr>
-                            <td>{{ a }}</td>
-                            <td>{{ b }}</td>
+                            <td>{{ gettext(a) }}</td>
+                            <td>{{ render_item_value( b, 120 ) }}</td>
                         </tr>
                   {% endif %}
                 {% endfor %}
-
+                {% endif %}
             </table>
         </section>
     </body>
