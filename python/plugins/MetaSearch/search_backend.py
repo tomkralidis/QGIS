@@ -143,6 +143,9 @@ class CSW202Search(SearchBase):
 
         return self.conn.records[identifier]
 
+    def parse_link(self, link):
+        return link    
+
 
 class OARecSearch(SearchBase):
     def __init__(self, url, timeout, auth):
@@ -219,7 +222,7 @@ class OARecSearch(SearchBase):
                 'type': rec['properties']['type'],
                 'bbox': None,
                 'title': rec['properties']['title'],
-                'links': rec['properties'].get('links', [])
+                'links': rec['properties'].get('associations', [])
             }
             try:
                 bbox2 = rec['properties']['extent']['spatial']['bbox'][0][0]
@@ -232,6 +235,17 @@ class OARecSearch(SearchBase):
 
         return recs
 
+    def parse_link(self, link):
+        link2 = {}
+        if 'href' in link:
+            link2['url'] = link['href']
+        if 'type' in link:
+            link2['protocol'] = link['type']
+        if 'title' in link:
+            link2['title'] = link['title']
+        if 'id' in link:
+            link2['name'] = link['id']
+        return link2  
 
 def get_catalog_service(url, catalog_type, timeout, username, password, auth):
     if catalog_type in [None, CATALOG_TYPES[0]]:

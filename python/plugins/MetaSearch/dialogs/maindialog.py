@@ -551,11 +551,13 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             return
 
         # if the record has a bbox, show a footprint on the map
+        # this is the 'proper' coord order of the box returned by owslib
         if record['bbox'] is not None:
             bx = record['bbox']
-            rt = QgsRectangle(float(bx['minx']), float(bx['miny']),
-                              float(bx['maxx']), float(bx['maxy']))
+            rt = QgsRectangle(float(bx['minx']), float(bx['maxx']),
+                              float(bx['miny']), float(bx['maxy']))
             geom = QgsGeometry.fromRect(rt)
+            
             if geom is not None:
                 src = QgsCoordinateReferenceSystem("EPSG:4326")
                 dst = self.map.mapSettings().destinationCrs()
@@ -579,7 +581,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
 
         services = {}
         for link in record['links']:
-
+            link = self.catalog.parse_link(link)
             if 'scheme' in link:
                 link_type = link['scheme']
             elif 'protocol' in link:
@@ -589,7 +591,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
 
             if link_type is not None:
                 link_type = link_type.upper()
-
+            
             wmswmst_link_types = list(
                 map(str.upper, link_types.WMSWMST_LINK_TYPES))
             wfs_link_types = list(map(str.upper, link_types.WFS_LINK_TYPES))
