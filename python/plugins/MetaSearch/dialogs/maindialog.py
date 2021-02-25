@@ -551,11 +551,10 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             return
 
         # if the record has a bbox, show a footprint on the map
-        # this is the 'proper' coord order of the box returned by owslib
         if record['bbox'] is not None:
             bx = record['bbox']
-            rt = QgsRectangle(float(bx['minx']), float(bx['maxx']),
-                              float(bx['miny']), float(bx['maxy']))
+            rt = QgsRectangle(float(bx['minx']), float(bx['miny']),
+                              float(bx['maxx']), float(bx['maxy']))
             geom = QgsGeometry.fromRect(rt)
             
             if geom is not None:
