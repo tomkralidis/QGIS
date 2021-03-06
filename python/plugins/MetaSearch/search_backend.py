@@ -194,8 +194,8 @@ class OARecSearch(SearchBase):
                     self.record_collection, q=keywords, bbox=bbox, 
                     limit=limit, startindex=offset)
 
-        self.matches = self.response['numberMatched']
-        self.returned = self.response['numberReturned']
+        self.matches = self.response.get('numberMatched',0)
+        self.returned = self.response.get('numberReturned',0)
 
     def get_record(self, identifier):
 

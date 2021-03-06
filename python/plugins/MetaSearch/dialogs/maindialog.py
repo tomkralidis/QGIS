@@ -624,7 +624,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                     self.mActionAddAfs.setEnabled(True)
                 if link_type in gis_file_link_types:
                     services['gis_file'] = link['url']
-                    services['title'] = record.title
+                    services['title'] = record.get('title','')
                     self.mActionAddGisFile.setEnabled(True)
                 self.tbAddData.setEnabled(True)
 
@@ -669,11 +669,22 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             else:
                 self.startfrom -= self.maxrecords
 
+        # bbox
+        # CRS is WGS84 with axis order longitude, latitude
+        # defined by 'urn:ogc:def:crs:OGC:1.3:CRS84'
+        minx = self.leWest.text()
+        miny = self.leSouth.text()
+        maxx = self.leEast.text()
+        maxy = self.leNorth.text()
+        bbox = [minx, miny, maxx, maxy]
+        keywords = self.leKeywords.text()
+
         try:
             print("MAXRECORDS", self.maxrecords)
             print("STARTFROM", self.startfrom)
             with OverrideCursor(Qt.WaitCursor):
-                self.catalog.query_records(limit=self.maxrecords,
+                self.catalog.query_records(bbox, keywords, 
+                                           limit=self.maxrecords,
                                            offset=self.startfrom)
         except Exception as err:
             QMessageBox.warning(self, self.tr('Search error'),
