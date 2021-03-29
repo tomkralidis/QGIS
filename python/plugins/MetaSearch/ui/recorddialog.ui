@@ -14,15 +14,8 @@
    <string>Record Metadata</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
-   <item>
-    <widget class="QTextBrowser" name="textMetadata">
-     <property name="lineWrapMode">
-      <enum>QTextEdit::NoWrap</enum>
-     </property>
-     <property name="openExternalLinks">
-      <bool>true</bool>
-     </property>
-    </widget>
+   <item alignment="Qt::AlignTop">
+    <widget class="QWebView" name="textMetadata"/>
    </item>
    <item>
     <widget class="QDialogButtonBox" name="buttonBox">

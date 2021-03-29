@@ -259,8 +259,8 @@ def bbox_list_to_dict(bbox):
     if isinstance(bbox, list):
         dict_ = {
             'minx': bbox[0],
-            'maxx': bbox[2],
             'miny': bbox[1],
+            'maxx': bbox[2],
             'maxy': bbox[3]
         }
     else:

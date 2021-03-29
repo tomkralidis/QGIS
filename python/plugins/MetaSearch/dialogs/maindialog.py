@@ -35,6 +35,7 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (QDialog, QComboBox,
                                  QDialogButtonBox, QMessageBox,
                                  QTreeWidgetItem, QWidget)
+from qgis.PyQt.QtWebKitWidgets import QWebView
 from qgis.PyQt.QtGui import QColor
 
 from qgis.core import (QgsApplication, QgsCoordinateReferenceSystem,
@@ -274,7 +275,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                                        self.catalog.service_info_template)
             style = QgsApplication.reportStyleSheet()
             self.textMetadata.clear()
-            self.textMetadata.document().setDefaultStyleSheet(style)
+            # self.textMetadata.document().setDefaultStyleSheet(style)
             self.textMetadata.setHtml(metadata)
 
             # clear results and disable buttons in Search tab
@@ -304,6 +305,8 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             self.settings.value('/MetaSearch/%s/username' % current_text))
         conn_edit.lePassword.setText(
             self.settings.value('/MetaSearch/%s/password' % current_text))
+        conn_edit.cmbCatalogType.setCurrentText(
+            self.settings.value('/MetaSearch/%s/catalog-type' % current_text))
         conn_edit.leCatalogType.setText(
             self.settings.value('/MetaSearch/%s/catalog-type' % current_text))
 
@@ -551,10 +554,10 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             return
 
         # if the record has a bbox, show a footprint on the map
-        if record['bbox'] is not None:
-            bx = record['bbox']
-            rt = QgsRectangle(float(bx['minx']), float(bx['miny']),
-                              float(bx['maxx']), float(bx['maxy']))
+        try:
+            bx = record['bbox'] or record.bbox
+            rt = QgsRectangle( float(bx['minx']), float(bx['miny']),
+                               float(bx['maxx']), float(bx['maxy']))
             geom = QgsGeometry.fromRect(rt)
             
             if geom is not None:
@@ -563,14 +566,10 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                 if src.postgisSrid() != dst.postgisSrid():
                     ctr = QgsCoordinateTransform(
                         src, dst, QgsProject.instance())
-                    try:
-                        geom.transform(ctr)
-                    except Exception as err:
-                        QMessageBox.warning(
-                            self,
-                            self.tr('Coordinate Transformation Error'),
-                            str(err))
+                    geom.transform(ctr)
                 self.rubber_band.setToGeometry(geom, None)
+        except:
+            pass
 
         # figure out if the data is interactive and can be operated on
         self.find_services(record, item)
@@ -868,7 +867,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                                    record, self.catalog.record_info_template)
 
         style = QgsApplication.reportStyleSheet()
-        crd.textMetadata.document().setDefaultStyleSheet(style)
+        # crd.textMetadata.document().setDefaultStyleSheet(style)
         crd.textMetadata.setHtml(metadata)
         crd.exec_()
 
