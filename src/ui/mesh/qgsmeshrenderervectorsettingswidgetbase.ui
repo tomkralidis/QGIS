@@ -157,8 +157,8 @@
       </item>
       <item row="0" column="4">
        <widget class="QPushButton" name="mColorRampShaderLoadButton">
-        <property name="text">
-         <string/>
+        <property name="toolTip">
+         <string>Load</string>
         </property>
         <property name="icon">
          <iconset resource="../../../images/images.qrc">
