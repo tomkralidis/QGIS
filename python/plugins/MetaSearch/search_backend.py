@@ -91,7 +91,8 @@ class CSW202Search(SearchBase):
             rec = {
                 'identifier': None,
                 'type': None,
-                'title': None
+                'title': None,
+                'bbox': None
             }
 
             if self.conn.records[record].identifier:

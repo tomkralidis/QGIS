@@ -468,6 +468,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         # TODO: allow users to select resources types
         # to find ('service', 'dataset', etc.)
         try:
+            print(self.catalog.url)
             with OverrideCursor(Qt.WaitCursor):
                 self.catalog.query_records(bbox, keywords, self.maxrecords,
                                            self.startfrom)
@@ -856,6 +857,10 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                                           password=self.catalog_password,
                                           auth=auth)
                 record = cat.get_record(identifier)
+                if cat.type == 'OGC API - Records':
+                    record['url'] = cat.conn.request
+                elif cat.type == 'OGC CSW 2.0.2':
+                    record.url = cat.conn.request
 
         except Exception as err:
             QMessageBox.warning(
