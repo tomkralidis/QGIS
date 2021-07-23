@@ -98,7 +98,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         self.cmbConnectionsSearch.activated.connect(self.save_connection)
         self.btnServerInfo.clicked.connect(self.connection_info)
         self.btnAddDefault.clicked.connect(self.add_default_connections)
-        self.btnRawAPIResponse.clicked.connect(self.show_xml)
+        self.btnRawAPIResponse.clicked.connect(self.show_api)
         self.tabWidget.currentChanged.connect(self.populate_connection_list)
 
         # server management buttons
@@ -133,7 +133,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         self.mActionAddAms.triggered.connect(self.add_to_ows)
         self.mActionAddAfs.triggered.connect(self.add_to_ows)
         self.mActionAddGisFile.triggered.connect(self.add_gis_file)
-        self.btnViewRawAPIResponse.clicked.connect(self.show_xml)
+        self.btnViewRawAPIResponse.clicked.connect(self.show_api)
 
         self.manageGui()
 
@@ -882,8 +882,8 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         crd.textMetadata.setHtml(metadata)
         crd.exec_()
 
-    def show_xml(self):
-        """show XML request / response"""
+    def show_api(self):
+        """show API request / response"""
 
         crd = APIRequestResponseDialog()
         request_html = highlight_content(self.context, self.catalog.request,
@@ -899,7 +899,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         crd.txtbrAPIResponse.setHtml(response_html)
         crd.exec_()
 
-    def reset_buttons(self, services=True, xml=True, navigation=True):
+    def reset_buttons(self, services=True, api=True, navigation=True):
         """Convenience function to disable WMS/WMTS|WFS|WCS buttons"""
 
         if services:
@@ -911,7 +911,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             self.mActionAddAfs.setEnabled(False)
             self.mActionAddGisFile.setEnabled(False)
 
-        if xml:
+        if api:
             self.btnViewRawAPIResponse.setEnabled(False)
 
         if navigation:
