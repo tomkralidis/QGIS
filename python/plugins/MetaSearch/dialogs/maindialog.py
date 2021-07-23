@@ -48,10 +48,10 @@ from MetaSearch import link_types
 from MetaSearch.dialogs.manageconnectionsdialog import ManageConnectionsDialog
 from MetaSearch.dialogs.newconnectiondialog import NewConnectionDialog
 from MetaSearch.dialogs.recorddialog import RecordDialog
-from MetaSearch.dialogs.xmldialog import XMLDialog
+from MetaSearch.dialogs.apidialog import APIRequestResponseDialog
 from MetaSearch.search_backend import get_catalog_service
 from MetaSearch.util import (clean_ows_url, get_connections_from_file,
-                             get_ui_class, get_help_url, highlight_xml,
+                             get_ui_class, get_help_url, highlight_content,
                              normalize_text, open_url, render_template,
                              serialize_string, StaticContext)
 
@@ -93,12 +93,12 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         self.disable_ssl_verification = False
         self.constraints = []
 
-        # Servers tab
+        # Services tab
         self.cmbConnectionsServices.activated.connect(self.save_connection)
         self.cmbConnectionsSearch.activated.connect(self.save_connection)
         self.btnServerInfo.clicked.connect(self.connection_info)
         self.btnAddDefault.clicked.connect(self.add_default_connections)
-        self.btnCapabilities.clicked.connect(self.show_xml)
+        self.btnRawAPIResponse.clicked.connect(self.show_xml)
         self.tabWidget.currentChanged.connect(self.populate_connection_list)
 
         # server management buttons
@@ -133,7 +133,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         self.mActionAddAms.triggered.connect(self.add_to_ows)
         self.mActionAddAfs.triggered.connect(self.add_to_ows)
         self.mActionAddGisFile.triggered.connect(self.add_gis_file)
-        self.btnShowXml.clicked.connect(self.show_xml)
+        self.btnViewRawAPIResponse.clicked.connect(self.show_xml)
 
         self.manageGui()
 
@@ -142,7 +142,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
 
         self.tabWidget.setCurrentIndex(0)
         self.populate_connection_list()
-        self.btnCapabilities.setEnabled(False)
+        self.btnRawAPIResponse.setEnabled(False)
         self.spnRecords.setValue(
             int(self.settings.value('/MetaSearch/returnRecords', 10)))
 
@@ -159,7 +159,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         # install proxy handler if specified in QGIS settings
         self.install_proxy()
 
-    # Servers tab
+    # Services tab
 
     def populate_connection_list(self):
         """populate select box with connections"""
@@ -251,7 +251,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         if caller == 'cmbConnectionsServices':  # clear server metadata
             self.textMetadata.clear()
 
-        self.btnCapabilities.setEnabled(False)
+        self.btnRawAPIResponse.setEnabled(False)
 
     def connection_info(self):
         """show connection info"""
@@ -268,7 +268,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             return
 
         if self.catalog:  # display service metadata
-            self.btnCapabilities.setEnabled(True)
+            self.btnRawAPIResponse.setEnabled(True)
             metadata = render_template('en', self.context,
                                        self.catalog.conn,
                                        self.catalog.service_info_template)
@@ -507,7 +507,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             if rec['identifier']:
                 set_item_data(item, 'identifier', rec['identifier'])
 
-        self.btnShowXml.setEnabled(True)
+        self.btnViewRawAPIResponse.setEnabled(True)
 
         if self.catalog.matches < self.maxrecords:
             disabled = False
@@ -885,16 +885,18 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
     def show_xml(self):
         """show XML request / response"""
 
-        crd = XMLDialog()
-        request_html = highlight_xml(self.context, self.catalog.request)
-        response_html = highlight_xml(self.context, self.catalog.response)
+        crd = APIRequestResponseDialog()
+        request_html = highlight_content(self.context, self.catalog.request,
+                                         self.catalog.format)
+        response_html = highlight_content(self.context, self.catalog.response,
+                                      self.catalog.format)
         style = QgsApplication.reportStyleSheet()
-        crd.txtbrXMLRequest.clear()
-        crd.txtbrXMLResponse.clear()
-        crd.txtbrXMLRequest.document().setDefaultStyleSheet(style)
-        crd.txtbrXMLResponse.document().setDefaultStyleSheet(style)
-        crd.txtbrXMLRequest.setHtml(request_html)
-        crd.txtbrXMLResponse.setHtml(response_html)
+        crd.txtbrAPIRequest.clear()
+        crd.txtbrAPIResponse.clear()
+        crd.txtbrAPIRequest.document().setDefaultStyleSheet(style)
+        crd.txtbrAPIResponse.document().setDefaultStyleSheet(style)
+        crd.txtbrAPIRequest.setHtml(request_html)
+        crd.txtbrAPIResponse.setHtml(response_html)
         crd.exec_()
 
     def reset_buttons(self, services=True, xml=True, navigation=True):
@@ -910,7 +912,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             self.mActionAddGisFile.setEnabled(False)
 
         if xml:
-            self.btnShowXml.setEnabled(False)
+            self.btnViewRawAPIResponse.setEnabled(False)
 
         if navigation:
             self.btnFirst.setEnabled(False)

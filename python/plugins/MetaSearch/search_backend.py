@@ -53,6 +53,7 @@ class SearchBase:
         self.response = None
         self.matches = 0
         self.returned = 0
+        self.format = None
 
     def get_service_info(self):
         pass
@@ -72,6 +73,7 @@ class CSW202Search(SearchBase):
         super().__init__(url, timeout, username, password, auth)
 
         self.type = CATALOG_TYPES[0]
+        self.format = 'xml'
         self.service_info_template = 'csw_service_metadata.html'
         self.record_info_template ='record_metadata_dc.html'
         self.constraints = []
@@ -153,6 +155,7 @@ class OARecSearch(SearchBase):
         super().__init__(url, timeout, auth)
 
         self.type = CATALOG_TYPES[1]
+        self.format = 'json'
         self.service_info_template = 'oarec_service_metadata.html'
         self.record_info_template = 'record_metadata_oarec.html'
         self.base_url = None
@@ -171,6 +174,10 @@ class OARecSearch(SearchBase):
                 pass
         else:
             self.conn = Records(self.url, timeout=self.timeout, auth=self.auth)
+
+        self.request = self.conn.request
+        self.response = self.conn._response
+
 
     def query_records(self, bbox=[], keywords=None, limit=10, offset=1):
 
@@ -195,8 +202,10 @@ class OARecSearch(SearchBase):
                     self.record_collection, q=keywords, bbox=bbox, 
                     limit=limit, startindex=offset)
 
-        self.matches = self.response.get('numberMatched',0)
-        self.returned = self.response.get('numberReturned',0)
+        self.matches = self.response.get('numberMatched', 0)
+        self.returned = self.response.get('numberReturned', 0)
+        self.request = self.conn.request
+
 
     def get_record(self, identifier):
 
@@ -207,7 +216,8 @@ class OARecSearch(SearchBase):
                     self.record_collection, q=identifier)
 
         record = None
-        for rec in self.response['features']: # to prevent false positives, pending get-by-id method
+        # to prevent false positives, pending get-by-id method
+        for rec in self.response['features']:
             if rec['id'] == identifier:
                 record = rec
                 break

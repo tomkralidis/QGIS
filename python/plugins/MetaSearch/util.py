@@ -25,6 +25,7 @@
 ###############################################################################
 
 from gettext import gettext, ngettext
+import json
 import logging
 import warnings
 import os
@@ -37,7 +38,7 @@ with warnings.catch_warnings():
     from jinja2 import Environment, FileSystemLoader
 
 from pygments import highlight
-from pygments.lexers import XmlLexer
+from pygments.lexers import JsonLexer, XmlLexer
 from pygments.formatters import HtmlFormatter
 from qgis.PyQt.QtCore import QUrl, QUrlQuery
 from qgis.PyQt.QtWidgets import QMessageBox
@@ -64,7 +65,7 @@ def get_ui_class(ui_file):
 
 
 def render_template(language, context, data, template):
-    """Renders HTML display of metadata XML"""
+    """Renders HTML display of raw API request/response/content"""
 
     env = Environment(extensions=['jinja2.ext.i18n'],
                       loader=FileSystemLoader(context.ppath))
@@ -113,16 +114,19 @@ def prettify_xml(xml):
         return parseString(xml).toprettyxml()
 
 
-def highlight_xml(context, xml):
-    """render XML as highlighted HTML"""
+def highlight_content(context, content, mimetype):
+    """render content as highlighted HTML"""
 
     hformat = HtmlFormatter()
     css = hformat.get_style_defs('.highlight')
-    body = highlight(prettify_xml(xml), XmlLexer(), hformat)
+    if mimetype == 'json':
+        body = highlight(json.dumps(content, indent=4), JsonLexer(), hformat)
+    elif mimetype == 'xml':
+        body = highlight(prettify_xml(content), XmlLexer(), hformat)
 
     env = Environment(loader=FileSystemLoader(context.ppath))
 
-    template_file = 'resources/templates/xml_highlight.html'
+    template_file = 'resources/templates/api_highlight.html'
     template = env.get_template(template_file)
     return template.render(css=css, body=body)
 
