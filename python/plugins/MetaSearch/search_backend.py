@@ -176,51 +176,29 @@ class OARecSearch(SearchBase):
             self.conn = Records(self.url, timeout=self.timeout, auth=self.auth)
 
         self.request = self.conn.request
-        self.response = self.conn._response
+        self.response = self.conn.response
 
     def query_records(self, bbox=[], keywords=None, limit=10, offset=1):
 
-        if 'collections' in self.url:
-            self.record_collection = self.url.rstrip('/').split('/')[-1]
+        params = {
+            'collection_id': self.record_collection,
+            'limit': limit,
+            'startindex': offset,
+        }
 
-        if keywords is None:
-            if bbox is []:
-                self.response = self.conn.collection_items(
-                    self.record_collection, limit=limit, startindex=offset)
-            else:
-                self.response = self.conn.collection_items(
-                    self.record_collection, bbox=bbox, limit=limit,
-                    startindex=offset)
-        else:
-            if bbox is []:
-                self.response = self.conn.collection_items(
-                    self.record_collection, q=keywords, limit=limit,
-                    startindex=offset)
-            else:
-                self.response = self.conn.collection_items(
-                    self.record_collection, q=keywords, bbox=bbox,
-                    limit=limit, startindex=offset)
+        if keywords:
+            params['q'] = keywords
+        if bbox and bbox != ['-180', '-90', '180', '90']:
+            params['bbox'] = bbox
+
+        self.response = self.conn.collection_items(**params)
 
         self.matches = self.response.get('numberMatched', 0)
         self.returned = self.response.get('numberReturned', 0)
         self.request = self.conn.request
 
     def get_record(self, identifier):
-
-        if 'collections' in self.url:
-            self.record_collection = self.url.rstrip('/').split('/')[-1]
-        # todo : implement a get-single-by-id or id filter on owslib
-        self.response = self.conn.collection_items(
-                    self.record_collection, q=identifier)
-
-        record = None
-        # to prevent false positives, pending get-by-id method
-        for rec in self.response['features']:
-            if rec['id'] == identifier:
-                record = rec
-                break
-
-        return record
+        return self.conn.collection_item(self.record_collection, identifier)
 
     def records(self):
         recs = []
