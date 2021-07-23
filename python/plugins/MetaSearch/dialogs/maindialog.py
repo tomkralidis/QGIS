@@ -474,7 +474,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                                            self.startfrom)
 
         except Exception as err:
-            QMessageBox.warning(self, self.tr('Search error'), 
+            QMessageBox.warning(self, self.tr('Search error'),
                                 self.tr('Search error: {0}').format(err))
             return
 
@@ -557,7 +557,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             rt = QgsRectangle(float(bx['minx']), float(bx['miny']),
                               float(bx['maxx']), float(bx['maxy']))
             geom = QgsGeometry.fromRect(rt)
-            
+
             if geom is not None:
                 src = QgsCoordinateReferenceSystem("EPSG:4326")
                 dst = self.map.mapSettings().destinationCrs()
@@ -591,7 +591,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
 
             if link_type is not None:
                 link_type = link_type.upper()
-            
+
             wmswmst_link_types = list(
                 map(str.upper, link_types.WMSWMST_LINK_TYPES))
             wfs_link_types = list(map(str.upper, link_types.WFS_LINK_TYPES))
@@ -625,7 +625,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                     self.mActionAddAfs.setEnabled(True)
                 if link_type in gis_file_link_types:
                     services['gis_file'] = link['url']
-                    services['title'] = record.get('title','')
+                    services['title'] = record.get('title', '')
                     self.mActionAddGisFile.setEnabled(True)
                 self.tbAddData.setEnabled(True)
 
@@ -684,7 +684,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             print("MAXRECORDS", self.maxrecords)
             print("STARTFROM", self.startfrom)
             with OverrideCursor(Qt.WaitCursor):
-                self.catalog.query_records(bbox, keywords, 
+                self.catalog.query_records(bbox, keywords,
                                            limit=self.maxrecords,
                                            offset=self.startfrom)
         except Exception as err:
@@ -868,9 +868,9 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
                 self.tr('Error getting response: {0}').format(err))
             return
         except KeyError as err:
-            QMessageBox.warning(self,
-                                self.tr('Record parsing error'),
-                                self.tr('Unable to locate record identifier'))
+            QMessageBox.warning(
+                self, self.tr('Record parsing error'),
+                self.tr('Unable to locate record identifier: {0}').format(err))
             return
 
         crd = RecordDialog()
@@ -889,7 +889,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         request_html = highlight_content(self.context, self.catalog.request,
                                          self.catalog.format)
         response_html = highlight_content(self.context, self.catalog.response,
-                                      self.catalog.format)
+                                          self.catalog.format)
         style = QgsApplication.reportStyleSheet()
         crd.txtbrAPIRequest.clear()
         crd.txtbrAPIResponse.clear()
@@ -1014,4 +1014,3 @@ def _get_field_value(field):
         value = 1
 
     return value
-

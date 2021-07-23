@@ -75,7 +75,7 @@ class CSW202Search(SearchBase):
         self.type = CATALOG_TYPES[0]
         self.format = 'xml'
         self.service_info_template = 'csw_service_metadata.html'
-        self.record_info_template ='record_metadata_dc.html'
+        self.record_info_template = 'record_metadata_dc.html'
         self.constraints = []
 
         self.conn = CatalogueServiceWeb(self.url, timeout=self.timeout,
@@ -147,7 +147,7 @@ class CSW202Search(SearchBase):
         return self.conn.records[identifier]
 
     def parse_link(self, link):
-        return link    
+        return link
 
 
 class OARecSearch(SearchBase):
@@ -178,7 +178,6 @@ class OARecSearch(SearchBase):
         self.request = self.conn.request
         self.response = self.conn._response
 
-
     def query_records(self, bbox=[], keywords=None, limit=10, offset=1):
 
         if 'collections' in self.url:
@@ -190,22 +189,21 @@ class OARecSearch(SearchBase):
                     self.record_collection, limit=limit, startindex=offset)
             else:
                 self.response = self.conn.collection_items(
-                    self.record_collection, bbox=bbox, limit=limit, 
+                    self.record_collection, bbox=bbox, limit=limit,
                     startindex=offset)
         else:
             if bbox is []:
                 self.response = self.conn.collection_items(
-                    self.record_collection, q=keywords, limit=limit, 
+                    self.record_collection, q=keywords, limit=limit,
                     startindex=offset)
             else:
                 self.response = self.conn.collection_items(
-                    self.record_collection, q=keywords, bbox=bbox, 
+                    self.record_collection, q=keywords, bbox=bbox,
                     limit=limit, startindex=offset)
 
         self.matches = self.response.get('numberMatched', 0)
         self.returned = self.response.get('numberReturned', 0)
         self.request = self.conn.request
-
 
     def get_record(self, identifier):
 
@@ -256,9 +254,11 @@ class OARecSearch(SearchBase):
             link2['title'] = link['title']
         if 'id' in link:
             link2['name'] = link['id']
-        return link2  
+        return link2
 
-def get_catalog_service(url, catalog_type, timeout, username, password, auth=None):
+
+def get_catalog_service(url, catalog_type, timeout, username, password,
+                        auth=None):
     if catalog_type in [None, CATALOG_TYPES[0]]:
         return CSW202Search(url, timeout, username, password, auth)
     elif catalog_type == CATALOG_TYPES[1]:
@@ -266,7 +266,6 @@ def get_catalog_service(url, catalog_type, timeout, username, password, auth=Non
 
 
 def bbox_list_to_dict(bbox):
-    print("BBOX", bbox)
     if isinstance(bbox, list):
         dict_ = {
             'minx': bbox[0],
