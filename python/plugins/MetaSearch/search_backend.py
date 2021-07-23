@@ -61,11 +61,14 @@ class SearchBase:
     def query_records(self):
         pass
 
+    def records(self):
+        pass
+
     def get_record(self, identifier):
         pass
 
-    def records(self):
-        pass
+    def parse_link(self, link):
+        return link
 
 
 class CSW202Search(SearchBase):
@@ -82,6 +85,33 @@ class CSW202Search(SearchBase):
                                         username=self.username,
                                         password=self.password,
                                         auth=self.auth)
+
+        self.request = self.conn.request
+        self.response = self.conn.response
+
+    def query_records(self, bbox=[], keywords=None, limit=10, offset=1):
+
+        # only apply spatial filter if bbox is not global
+        # even for a global bbox, if a spatial filter is applied, then
+        # the CSW server will skip records without a bbox
+        if bbox and bbox != ['-180', '-90', '180', '90']:
+            minx, miny, maxx, maxy = bbox
+            self.constraints.append(BBox([miny, minx, maxy, maxx],
+                                    crs='urn:ogc:def:crs:EPSG::4326'))
+
+        # keywords
+        if keywords:
+            # TODO: handle multiple word searches
+            self.constraints.append(PropertyIsLike('csw:AnyText', keywords))
+
+        if len(self.constraints) > 1:  # exclusive search (a && b)
+            self.constraints = [self.constraints]
+
+        self.conn.getrecords2(constraints=self.constraints, maxrecords=limit,
+                              startposition=offset, esn='full')
+
+        self.matches = self.conn.results['matches']
+        self.returned = self.conn.results['returned']
 
         self.request = self.conn.request
         self.response = self.conn.response
@@ -114,40 +144,10 @@ class CSW202Search(SearchBase):
 
         return recs
 
-    def query_records(self, bbox=[], keywords=None, limit=10, offset=1):
-
-        # only apply spatial filter if bbox is not global
-        # even for a global bbox, if a spatial filter is applied, then
-        # the CSW server will skip records without a bbox
-        if bbox and bbox != ['-180', '-90', '180', '90']:
-            minx, miny, maxx, maxy = bbox
-            self.constraints.append(BBox([miny, minx, maxy, maxx],
-                                    crs='urn:ogc:def:crs:EPSG::4326'))
-
-        # keywords
-        if keywords:
-            # TODO: handle multiple word searches
-            self.constraints.append(PropertyIsLike('csw:AnyText', keywords))
-
-        if len(self.constraints) > 1:  # exclusive search (a && b)
-            self.constraints = [self.constraints]
-
-        self.conn.getrecords2(constraints=self.constraints, maxrecords=limit,
-                              startposition=offset, esn='full')
-
-        self.matches = self.conn.results['matches']
-        self.returned = self.conn.results['returned']
-
-        self.request = self.conn.request
-        self.response = self.conn.response
-
     def get_record(self, identifier):
         self.conn.getrecordbyid([identifier])
 
         return self.conn.records[identifier]
-
-    def parse_link(self, link):
-        return link
 
 
 class OARecSearch(SearchBase):
@@ -197,9 +197,6 @@ class OARecSearch(SearchBase):
         self.returned = self.response.get('numberReturned', 0)
         self.request = self.conn.request
 
-    def get_record(self, identifier):
-        return self.conn.collection_item(self.record_collection, identifier)
-
     def records(self):
         recs = []
 
@@ -207,20 +204,26 @@ class OARecSearch(SearchBase):
             rec1 = {
                 'identifier': rec['id'],
                 'type': rec['properties']['type'],
+
+
+
                 'bbox': None,
                 'title': rec['properties']['title'],
                 'links': rec['properties'].get('associations', [])
             }
             try:
-                bbox2 = rec['properties']['extent']['spatial']['bbox'][0][0]
+                bbox2 = rec['properties']['extent']['spatial']['bbox'][0]
                 if bbox2:
                     rec1['bbox'] = bbox_list_to_dict(bbox2)
-            except KeyError:
+            except KeyError as err:
                 pass
 
             recs.append(rec1)
 
         return recs
+
+    def get_record(self, identifier):
+        return self.conn.collection_item(self.record_collection, identifier)
 
     def parse_link(self, link):
         link2 = {}

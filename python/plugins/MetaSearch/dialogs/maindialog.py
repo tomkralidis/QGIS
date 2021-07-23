@@ -518,6 +518,7 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         self.btnPrev.setEnabled(disabled)
         self.btnNext.setEnabled(disabled)
         self.btnLast.setEnabled(disabled)
+        self.btnRawAPIResponse.setEnabled(False)
 
     def clear_results(self):
         """clear search results"""
