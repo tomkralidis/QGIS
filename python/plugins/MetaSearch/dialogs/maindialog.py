@@ -304,7 +304,8 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
             self.settings.value('/MetaSearch/%s/username' % current_text))
         conn_edit.lePassword.setText(
             self.settings.value('/MetaSearch/%s/password' % current_text))
-        conn_edit.leCatalogType.setText(
+
+        conn_edit.cmbCatalogType.setCurrentText(
             self.settings.value('/MetaSearch/%s/catalog-type' % current_text))
 
         if conn_edit.exec_() == QDialog.Accepted:  # update service list
@@ -468,7 +469,6 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         # TODO: allow users to select resources types
         # to find ('service', 'dataset', etc.)
         try:
-            print(self.catalog.url)
             with OverrideCursor(Qt.WaitCursor):
                 self.catalog.query_records(bbox, keywords, self.maxrecords,
                                            self.startfrom)
@@ -682,8 +682,6 @@ class MetaSearchDialog(QDialog, BASE_CLASS):
         keywords = self.leKeywords.text()
 
         try:
-            print("MAXRECORDS", self.maxrecords)
-            print("STARTFROM", self.startfrom)
             with OverrideCursor(Qt.WaitCursor):
                 self.catalog.query_records(bbox, keywords,
                                            limit=self.maxrecords,
